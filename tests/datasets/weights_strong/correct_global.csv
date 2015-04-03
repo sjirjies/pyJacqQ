@@ -1,0 +1,13 @@
+exposure,False
+weights,True
+k,5
+permutations,99
+submitted_alpha,0.05
+multiple_testing_correction,NONE
+adjusted_alpha,0.05
+Q_case_years,0.1643835616
+Q_pval,0.01
+Q_sig,1
+Qf_case_years,0.0273972603
+Qf_pval,1
+Qf_sig,0

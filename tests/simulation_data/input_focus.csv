@@ -1,0 +1,5 @@
+ID,start_date,end_date,x,y
+Large Constant,20150101,20160101,-75,-75
+Medium Linear,20150101,20160101,90,90
+Small Constant,20150101,20160101,130,-120
+Away From Sources,20150101,20160101,-150,150

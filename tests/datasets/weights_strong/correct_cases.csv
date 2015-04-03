@@ -1,0 +1,13 @@
+id,Qi_case_years,pval,sig
+heavy_case1,0.0136986301,1,0
+heavy_case2,0.0136986301,1,0
+heavy_case3,0.0136986301,1,0
+heavy_case4,0.0136986301,1,0
+heavy_case5,0.0136986301,1,0
+heavy_case6,0.0136986301,1,0
+light_case1,0.0136986301,0.01,1
+light_case2,0.0136986301,0.01,1
+light_case3,0.0136986301,0.01,1
+light_case4,0.0136986301,0.01,1
+light_case5,0.0136986301,0.01,1
+light_case6,0.0136986301,0.01,1

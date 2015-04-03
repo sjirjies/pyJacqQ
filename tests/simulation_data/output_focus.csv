@@ -1,0 +1,5 @@
+id,Qif_case_years,pval,sig
+Away From Sources,0.0,1.0,0
+Large Constant,6.071232876712329,0.01,1
+Medium Linear,5.1945205479452055,0.01,1
+Small Constant,5.375342465753425,0.01,1

@@ -1,0 +1,5 @@
+start_date,end_date,id,x,y,Qift_days,pval,sig
+20150101,20150102,heavy_case_focus,0.5,1,5,1,0
+20150101,20150102,light_case_focus,0.5,9,5,0.01,1
+20150101,20150102,heavy_control_focus,8.5,1,0,1,0
+20150101,20150102,light_control_focus,8.5,9,0,1,0

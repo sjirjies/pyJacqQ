@@ -1,0 +1,5 @@
+ID,start_date,end_date,x,y
+heavy_case_focus,20150101,20150102,0.5,1
+light_case_focus,20150101,20150102,0.5,9
+heavy_control_focus,20150101,20150102,8.5,1
+light_control_focus,20150101,20150102,8.5,9
