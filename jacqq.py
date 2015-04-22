@@ -808,8 +808,9 @@ class QStatsStudy:
         results.case_weights_enabled = use_weights
         results.Q_case_years = (global_Q.statistic/365.0, global_Q.p_value, int(global_Q.p_value <= correct_alpha))
         results.normalized_Q = results.Q_case_years[0] / len(study_entities)
-        results.Qf_case_years = (global_Qf.statistic/365.0, global_Qf.p_value, int(global_Qf.p_value <= correct_alpha))
-        results.normalized_Qf = results.Qf_case_years[0] / len(focus_entities)
+        if focus_entities:
+            results.Qf_case_years = (global_Qf.statistic/365.0, global_Qf.p_value, int(global_Qf.p_value <= correct_alpha))
+            results.normalized_Qf = results.Qf_case_years[0] / len(focus_entities)
         for entity_name in sorted(study_entities.keys()):
             entity = study_entities[entity_name]
             if entity.is_case:
