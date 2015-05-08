@@ -36,6 +36,7 @@ This module provides several options for the statistics:
  - Results that can be saved to several normalized CSVs for the several 
  statistical sets.
  - API and CLI.
+ - Preparser that finds data errors.
 
 ## Formatting Input Data
 The analysis requires two CSVs: the residential histories of cases/contorls 
@@ -115,16 +116,28 @@ python3 jacqq.py --resident=tests/simulation_data/input_residence_histories.csv 
     --exposure --weights --shuffles=99 --alpha=0.05 \
     --correction='BINOM' --neighbors=15
 ```
-Shorthands for the arguments and default values can be found by passing 
-the `--help` flag.
+By default the program will check for errors in the submitted data and 
+write them to standard error. This can be suppressed by passing a `-N` or 
+`--no_inspect` flag. More shorthands for the arguments and default values can be 
+found by passing the `--help` flag.
 
 ## API
-First intantiate a `QStatsStudy` object with the location of the input files:
+First import the module:
 ```python
 import jacqq
 details = "tests/simulation_data/input_details.csv"
 histories = "tests/simulation_data/input_residential_histories.csv"
 focus = "tests/simulation_data/input_focus.csv"
+```
+At this point you may elect to use the data preparser to check for errors 
+given the parameters you plan to use:
+```python
+errors = check_data_dirty(details, histories, focus, exposure=False, weights=False):
+```
+This returns a list of errors present in the data that need correction, for 
+example, missing attributes or wrong data types. Next intantiate a `QStatsStudy` 
+object with the location of the input files:
+```python
 study = jacqq.QStatsStudy(details, histories, focus)
 ```
 Then, simply call its `run_analysis` method with the desired options. 
