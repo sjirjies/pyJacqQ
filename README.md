@@ -135,8 +135,10 @@ given the parameters you plan to use:
 errors = check_data_dirty(details, histories, focus, exposure=False, weights=False):
 ```
 This returns a list of errors present in the data that need correction, for 
-example, missing attributes or wrong data types. Next intantiate a `QStatsStudy` 
-object with the location of the input files:
+example, missing attributes or wrong data types. If errors are present, they should
+be corrected and `check_data_dirty` rerun to ensure no additional errors.
+
+Next intantiate a `QStatsStudy` object with the location of the input files:
 ```python
 study = jacqq.QStatsStudy(details, histories, focus)
 ```
