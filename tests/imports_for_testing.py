@@ -23,8 +23,7 @@ TimeSlice = study._TimeSlice
 FocusEntity = study._FocusEntity
 FocusPoint = study._FocusPoint
 StudyStatistic = study._StudyStatistic
-
-load_csv_file = QStatsStudy._load_csv_file
+load_csv_file = study._load_csv_file
 extract_unique_dates = QStatsStudy._extract_unique_dates
 collect_series_data_into_time_slice = QStatsStudy._collect_series_data_into_time_slice
 collect_series_focus_data_into_time_slice = QStatsStudy._collect_series_focus_data_into_time_slice

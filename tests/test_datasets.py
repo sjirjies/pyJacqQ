@@ -20,6 +20,7 @@ import os
 import csv
 
 from jacqq import QStatsStudy
+from jacqq import _load_csv_file as load_csv_file
 
 # TODO: Test the dates with less than k+1 points
 
@@ -99,7 +100,7 @@ class DataTestHelper:
                 % (str(correct), file_name, attributes, self.folder_name)
 
     def test_data_set(self, attributes, file_name, results):
-        correct_legend, correct_rows = QStatsStudy._load_csv_file(self.folder + file_name)
+        correct_legend, correct_rows = load_csv_file(self.folder + file_name)
         result_legend, result_rows = results
         correct_rows = DataTestHelper.extract_attributes(correct_legend, correct_rows, attributes)
         legend = DataTestHelper.convert_row_to_legend(result_legend)

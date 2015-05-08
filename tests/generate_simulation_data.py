@@ -18,6 +18,7 @@ import random
 import string
 import datetime
 import csv
+import sys
 import argparse
 import math
 
@@ -198,6 +199,9 @@ if __name__ == '__main__':
     print('CASES:', len(cases))
     print('CONTROLS:', args.number_individuals - len(cases))
     # Randomly match cases to controls
+    if len(cases) == 0:
+        print("No cases generated. Exiting.")
+        sys.exit(1)
     for control in controls:
         case = random.choice(cases)
         control.date_of_initial_exposure = case.date_of_initial_exposure

@@ -18,6 +18,7 @@
 
 __version__ = '0.1.1'
 import sys
+import os
 import scipy.spatial as spatial
 import scipy.stats
 import collections
@@ -26,8 +27,197 @@ import datetime
 import numpy as np
 import argparse
 from random import random, choice
-import time
 import csv
+
+
+def _load_csv_file(filepath):
+    with open(filepath, 'r') as csv_file:
+        legend = {}
+        contents = []
+        reader = csv.reader(csv_file)
+        try:
+            header = next(reader)
+            for line in reader:
+                contents.append(line)
+            for item in header:
+                legend[item] = header.index(item)
+        except csv.Error as error:
+            sys.exit('File %s, line %d: %s' % (filepath, reader.line_num, error))
+        return legend, np.array(contents, dtype=np.object)
+
+
+def check_data_dirty(details_csv_path, histories_csv_path, focus_csv_path=None, exposure=False, weights=False):
+    # - People who are at multiple locations at once
+
+    def dirty_headers(all_info):
+        # Make sure all headers are correct
+        errors = []
+        for file_name, info in all_info.items():
+            schema, header, data = info
+            for attribute in schema:
+                column_name, column_type = attribute, schema[attribute]
+                if column_name not in header:
+                    errors.append("File '%s': Missing column header '%s'" % (file_name, column_name))
+        return errors
+
+    def wrong_number_attributes(all_info):
+        # Make sure the number of attributes per row match the number of column headings
+        errors = []
+        for file_name, info in all_info.items():
+            schema, header, data = info
+            schema_length = len(schema)
+            for index, row in enumerate(data):
+                if len(row) != schema_length:
+                    errors.append("File '%s': Row %d has an incorrect number of attributes" %
+                                  (file_name, index+2))
+        return errors
+
+    def empty_fields(all_info):
+        # Make sure none of the fields are empty
+        errors = []
+        for file_name, info in all_info.items():
+            schema, header, data = info
+            reverse_header = {val: key for key, val in header.items()}
+            for row_index, row in enumerate(data):
+                for field_index, field in enumerate(row):
+                    if not field:
+                        errors.append("File '%s': Row %d is missing value for field '%s'" %
+                                      (file_name, row_index+2, reverse_header[field_index]))
+        return errors
+
+    def dirty_data_types(all_info):
+        # Make sure the data types match the header types
+        errors = []
+        for file_name, info in all_info.items():
+            schema, header, data = info
+            reverse_header = {val: key for key, val in header.items()}
+            for row_index, row in enumerate(data):
+                for field_index, field in enumerate(row):
+                    correct_type = schema[reverse_header[field_index]]
+                    if correct_type is 'date':
+                        if len(str(field)) != 8 or not str(field).isdigit():
+                            errors.append("File '%s': Row %d requires date format YYYYMMDD for attribute '%s'" %
+                                          (file_name, row_index+2, reverse_header[field_index]))
+                    elif correct_type is float:
+                        try:
+                            numeric_field = float(field)
+                            if reverse_header[field_index] in ('exposure_duration', 'latency'):
+                                if numeric_field < 0:
+                                    errors.append("File '%s': Row %d required a non-negative value for attribute '%s'" %
+                                                  (file_name, row_index+2, reverse_header[field_index]))
+                        except ValueError:
+                            errors.append("File '%s': Row %d requires a number for attribute '%s'" %
+                                          (file_name, row_index+2, reverse_header[field_index]))
+                    elif correct_type is bool:
+                        if field != "0" and field != "1":
+                            errors.append("File '%s': Row %d requires a 0 or 1 for attribute '%s'" %
+                                          (file_name, row_index+2, reverse_header[field_index]))
+        return errors
+
+    def all_cases_or_controls(details_path, all_info):
+        # Make sure there are both cases and controls
+        errors = []
+        details_file_name = os.path.basename(details_path)[:-4]
+        det_schema, det_header, det_data = all_info[details_file_name]
+        det_reverse_header = {val: key for key, val in det_header.items()}
+        found_case = False
+        found_control = False
+        for row_index, row in enumerate(det_data):
+            stat = row[det_header['is_case']]
+            if stat == '0':
+                found_control = True
+            elif stat == "1":
+                found_case = True
+        if not found_case:
+            errors.append("File '%s': Details data can not only contain controls" % details_file_name)
+        if not found_control:
+            errors.append("File '%s': Details data can not only contain cases" % details_file_name)
+        return errors
+
+    def all_ids_present(details_path, histories_path, all_info):
+        errors = []
+        details_file_name = os.path.basename(details_path)[:-4]
+        det_schema, det_header, det_data = all_info[details_file_name]
+        histories_file_name = os.path.basename(histories_path)[:-4]
+        his_schema, his_header, his_data = all_info[histories_file_name]
+        details_ids = set()
+        for row_index, row in enumerate(det_data):
+            details_ids.add(row[det_header['ID']])
+        histories_ids = set()
+        for row_index, row in enumerate(his_data):
+            histories_ids.add(row[his_header['ID']])
+        for item in details_ids:
+            if item not in histories_ids:
+                errors.append("Individual '%s' is in details file '%s' but not histories file '%s'" %
+                              (item, details_file_name, histories_file_name))
+        return errors
+
+    def end_after_start_dates(histories_path, all_info, focus_path=None):
+        errors = []
+        his_file_name = os.path.basename(histories_path)[:-4]
+        his_schema, his_header, his_data = all_info[his_file_name]
+        groups = [(his_file_name, his_header, his_data)]
+        if focus_path:
+            focus_file_name = os.path.basename(focus_path)[:-4]
+            focus_schema, focus_header, focus_data = all_info[focus_file_name]
+            groups.append((focus_file_name, focus_header, focus_data))
+        for filename, header, data in groups:
+            for row_index, row in enumerate(his_data):
+                start_date = row[his_header['start_date']]
+                end_date = row[his_header['end_date']]
+                if int(end_date) <= int(start_date):
+                    errors.append("File '%s': Start date must be before end date in row %d" % (filename, row_index+2))
+        return errors
+
+    # Collect header information with the data type of that column
+    details_schema = {'ID': str, 'is_case': bool}
+    if exposure:
+        details_schema['DOD'] = 'date'
+        details_schema['latency'] = float
+        details_schema['exposure_duration'] = float
+    if weights:
+        details_schema['weight'] = float
+    space_time_schema = {'ID': str, 'start_date': 'date', 'end_date': 'date', 'x': float, 'y': float}
+
+    # Bundle info together so the files only need to be loaded once
+    path_and_schemas = {details_csv_path: details_schema, histories_csv_path: space_time_schema}
+    if focus_csv_path:
+        path_and_schemas[focus_csv_path] = space_time_schema
+    all_file_info = {}
+    for file_path, schema in path_and_schemas.items():
+        header, data = _load_csv_file(file_path)
+        file_name = os.path.basename(file_path)[:-4]
+        all_file_info[file_name] = (schema, header, data)
+
+    # Lower errors checks require upper checks to pass so return any errors as they are found.
+    errors = dirty_headers(all_file_info)
+    if errors:
+        return errors
+
+    errors = wrong_number_attributes(all_file_info)
+    if errors:
+        return errors
+
+    errors = empty_fields(all_file_info)
+    if errors:
+        return errors
+
+    errors = dirty_data_types(all_file_info)
+    if errors:
+        return errors
+
+    errors = all_cases_or_controls(details_csv_path, all_file_info)
+    if errors:
+        return errors
+
+    errors = all_ids_present(details_csv_path, histories_csv_path, all_file_info)
+    if errors:
+        return errors
+
+    errors = end_after_start_dates(histories_csv_path, all_file_info, focus_path=focus_csv_path)
+    if errors:
+        return errors
+    return errors
 
 
 class _StudyStatistic:
@@ -212,7 +402,7 @@ class _TimeSlice:
         stat = 0
         for point in self.points:
             stat += point.calculate_point_statistic(self.delta)
-        self.Qt.statistic = stat//self.delta
+        self.Qt.statistic = stat // self.delta
 
     def calculate_observed_Qft(self):
         # Calculate Q_ft
@@ -302,6 +492,7 @@ class QStudyResults:
     >>> r.write_to_files('global.csv', 'cases.csv', 'dates.csv',
         'local_cases.csv', 'focus_results.csv', 'focus_local.csv')
     """
+
     def __init__(self):
         self.exposure_enabled = None
         self.case_weights_enabled = None
@@ -339,7 +530,8 @@ class QStudyResults:
             print(' Owner: %-21s Qi: %-5f pval: %.4f Sig: %s ' %
                   (ind_id, ind_stat[0], ind_stat[1], 'T' if ind_stat[2] else 'F'))
         if self.focus_entities:
-            print("-Global Focus:", self.Qf_case_years[0], 'pval:', self.Qf_case_years[1], 'sig:', self.Qf_case_years[2])
+            print("-Global Focus:", self.Qf_case_years[0], 'pval:', self.Qf_case_years[1], 'sig:',
+                  self.Qf_case_years[2])
             print("-Normalized Global Focus:", self.normalized_Qf)
             print("-Focus Entities:")
             for focus_name in self.focus_entities:
@@ -458,7 +650,8 @@ class QStudyResults:
             time_slice = self.time_slices[slice_date]
             for focus_point_id in time_slice.focus_points:
                 focus_point = time_slice.focus_points[focus_point_id]
-                focus_point_row = [slice_date, time_slice.end_date, focus_point_id, focus_point.loc[0], focus_point.loc[1]]
+                focus_point_row = [slice_date, time_slice.end_date, focus_point_id, focus_point.loc[0],
+                                   focus_point.loc[1]]
                 focus_point_row.extend(focus_point.stat)
                 local_focus_rows.append(focus_point_row)
         local_header = ['start_date', 'end_date', 'id', 'x', 'y', 'Qift_days', 'pval', 'sig']
@@ -537,6 +730,7 @@ class QStudyBinomialResults:
     Each value is given as
         (number of significant statistics, p-value, significance).
     """
+
     def __init__(self):
         self.cases = None
         self.dates = None
@@ -553,6 +747,7 @@ class QStudyEntityResult:
     .sig_points stores a dict of only significant points
     .stat stores the case's Q_i statistic.
     """
+
     def __init__(self, stat):
         self.points = collections.OrderedDict()
         self.sig_points = collections.OrderedDict()
@@ -574,6 +769,7 @@ class QStudyTimeSliceResult:
     .start_date is the first date of the time slice.
     .end_date is the last date of the time slice.
     """
+
     def __init__(self, start_date, end_date, stat, duration):
         self.points = collections.OrderedDict()
         self.sig_points = collections.OrderedDict()
@@ -591,6 +787,7 @@ class QStudyPointResult:
     .loc gives the (x, y) location.
     .stat gives (Q_it, p-value, significance)
     """
+
     def __init__(self, stat, loc):
         self.loc = loc
         self.stat = stat
@@ -714,17 +911,17 @@ class QStatsStudy:
         :return: A QStudyResults object.
         """
         # Load the study entities
-        details_legend, details_values = QStatsStudy._load_csv_file(self._study_details_path)
+        details_legend, details_values = _load_csv_file(self._study_details_path)
         study_entities = QStatsStudy._extract_study_entities(details_legend, details_values, use_exposure, use_weights)
         # Load the residential histories
-        histories_legend, histories_values = QStatsStudy._load_csv_file(self._study_histories_path)
+        histories_legend, histories_values = _load_csv_file(self._study_histories_path)
         if self._focus_data_path:
-            focus_legend, focus_values = QStatsStudy._load_csv_file(self._focus_data_path)
+            focus_legend, focus_values = _load_csv_file(self._focus_data_path)
             focus_entities = QStatsStudy._extract_focus_entities(focus_legend, focus_values)
         else:
             focus_legend, focus_values, focus_entities = None, None, None
         unique_dates = QStatsStudy._extract_unique_dates(study_entities, histories_legend, histories_values,
-                                                        focus_legend, focus_values, use_exposure)
+                                                         focus_legend, focus_values, use_exposure)
         # if not self._data_in_slices_format:
         time_slices = \
             QStatsStudy._create_time_slices_from_series(unique_dates, study_entities, histories_legend,
@@ -806,10 +1003,11 @@ class QStatsStudy:
         results.alpha_adjustment_method = str(correction).upper()
         results.exposure_enabled = use_exposure
         results.case_weights_enabled = use_weights
-        results.Q_case_years = (global_Q.statistic/365.0, global_Q.p_value, int(global_Q.p_value <= correct_alpha))
+        results.Q_case_years = (global_Q.statistic / 365.0, global_Q.p_value, int(global_Q.p_value <= correct_alpha))
         results.normalized_Q = results.Q_case_years[0] / len(study_entities)
         if focus_entities:
-            results.Qf_case_years = (global_Qf.statistic/365.0, global_Qf.p_value, int(global_Qf.p_value <= correct_alpha))
+            results.Qf_case_years = (
+                global_Qf.statistic / 365.0, global_Qf.p_value, int(global_Qf.p_value <= correct_alpha))
             results.normalized_Qf = results.Qf_case_years[0] / len(focus_entities)
         for entity_name in sorted(study_entities.keys()):
             entity = study_entities[entity_name]
@@ -842,8 +1040,9 @@ class QStatsStudy:
             for study_point in time_slice.points:
                 if study_point.owner.is_case:
                     point_is_sig = int(study_point.point_stat.p_value <= correct_alpha)
-                    qit_stat = (int(study_point.point_stat.statistic/time_slice.delta), study_point.point_stat.p_value,
-                                point_is_sig)
+                    qit_stat = (
+                        int(study_point.point_stat.statistic / time_slice.delta), study_point.point_stat.p_value,
+                        point_is_sig)
                     qit = QStudyPointResult(qit_stat, (study_point.x, study_point.y))
                     entity_id = study_point.owner.identity
                     time_result.points[entity_id] = qit
@@ -857,8 +1056,9 @@ class QStatsStudy:
             if self._focus_data_path:
                 for focus_point in time_slice.focus_points:
                     focus_point_is_sig = int(focus_point.point_stat.p_value <= correct_alpha)
-                    qft_stat = (int(focus_point.point_stat.statistic/time_slice.delta), focus_point.point_stat.p_value,
-                                focus_point_is_sig)
+                    qft_stat = (
+                        int(focus_point.point_stat.statistic / time_slice.delta), focus_point.point_stat.p_value,
+                        focus_point_is_sig)
                     qft = QStudyPointResult(qft_stat, (focus_point.x, focus_point.y))
                     focus_id = focus_point.owner.identity
                     time_result.focus_points[focus_id] = qft
@@ -893,22 +1093,6 @@ class QStatsStudy:
     def _get_binom_sig(total, num_sig, alpha):
         p_val = 1 - scipy.stats.binom(total, alpha).cdf(num_sig - 1)
         return num_sig, p_val, 1 if p_val <= alpha else 0
-
-    @staticmethod
-    def _load_csv_file(filepath):
-        with open(filepath, 'r') as csv_file:
-            legend = {}
-            contents = []
-            reader = csv.reader(csv_file)
-            try:
-                header = next(reader)
-                for line in reader:
-                    contents.append(line)
-                for item in header:
-                    legend[item] = header.index(item)
-            except csv.Error as error:
-                sys.exit('File %s, line %d: %s' % (filepath, reader.line_num, error))
-            return legend, np.array(contents, dtype=np.object)
 
     @staticmethod
     def _extract_unique_dates(entities, point_legend, point_histories, focus_legend, focus_data, exposure=False):
@@ -962,10 +1146,10 @@ class QStatsStudy:
         for selected_date in unique_dates:
             time_slice = _TimeSlice(selected_date)
             QStatsStudy._collect_series_data_into_time_slice(time_slice, p_legend, point_histories,
-                                                            study_entities, exposure)
+                                                             study_entities, exposure)
             if focus_entities and focus_histories.any() and f_legend:
                 QStatsStudy._collect_series_focus_data_into_time_slice(time_slice, f_legend,
-                                                                      focus_histories, focus_entities)
+                                                                       focus_histories, focus_entities)
             time_slices.append(time_slice)
         return time_slices
 
@@ -996,7 +1180,8 @@ class QStatsStudy:
                 case_weight = float(row[detail_legend['weight']])
             else:
                 case_weight = None
-            study_entities[identity] = (_StudyEntity(identity, is_case, date_first_exposure, date_of_contraction, case_weight))
+            study_entities[identity] = (
+                _StudyEntity(identity, is_case, date_first_exposure, date_of_contraction, case_weight))
         return study_entities
 
     @staticmethod
@@ -1130,8 +1315,8 @@ class QStatsStudy:
         # Traverse the list backwards and find the first index where p-value <= (index * alpha / #p-values)
         number_of_p_values = len(dependent_p_values)
         # this ratio never changes so it only needs to be calculated once
-        ratio = alpha_value / (number_of_p_values * sum([1.0/i for i in range(1, number_of_p_values+1)]))
-        for index in range(1, number_of_p_values+1):
+        ratio = alpha_value / (number_of_p_values * sum([1.0 / i for i in range(1, number_of_p_values + 1)]))
+        for index in range(1, number_of_p_values + 1):
             adjusted = index * ratio
             if dependent_p_values[index - 1] <= adjusted:
                 return dependent_p_values[index - 1]
@@ -1189,6 +1374,8 @@ if __name__ == "__main__":
                              "a large number of shuffles for any significance."
                              "'BINOM' applies the binomial method used in [1]; this is the default. "
                              "If any other string such as 'NONE' is given than no correction will be used.")
+    parser.add_argument('--no_inspect', '-N', action='store_true', default=False, dest='no_inspect',
+                        help="Pass this flag to prevent the program from pre-parsing the data for errors.")
     args = parser.parse_args()
     if args.focus_data:
         if args.out_focus is None or args.out_focus_local is None:
@@ -1196,11 +1383,21 @@ if __name__ == "__main__":
     if (args.out_focus or args.out_focus_local) and not args.focus_data:
         parser.error("Focus data will not be written if -out_focus and -out_focus_local are "
                      "specified but -focus_data is not. Outputting focus results requires an input of focus data.")
-    start = time.time()
-    q_analysis = QStatsStudy(args.details, args.histories, args.focus_data)
-    self = q_analysis.run_analysis(args.neighbors, args.use_exposure, args.use_case_weights, args.alpha,
-                                      args.shuffles, args.correction)
-    # results.print_results()
-    self.write_to_files(args.out_global, args.out_cases, args.out_dates, args.out_local,
-                           args.out_focus, args.out_focus_local)
-    print("Elapsed time:", round(time.time() - start, 3), "seconds")
+    run_approved = True
+    if not args.no_inspect:
+        weights = args.use_case_weights
+        errors = check_data_dirty(args.details, args.histories, args.focus_data, args.use_exposure, weights)
+        error_string = ""
+        if errors:
+            for error in errors:
+                error_string += str(error) + os.linesep
+            run_approved = False
+            sys.stderr.write(error_string)
+
+    if run_approved:
+        q_analysis = QStatsStudy(args.details, args.histories, args.focus_data)
+        self = q_analysis.run_analysis(args.neighbors, args.use_exposure, args.use_case_weights, args.alpha,
+                                       args.shuffles, args.correction)
+        # results.print_results()
+        self.write_to_files(args.out_global, args.out_cases, args.out_dates, args.out_local,
+                            args.out_focus, args.out_focus_local)
