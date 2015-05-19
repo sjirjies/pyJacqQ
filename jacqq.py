@@ -1384,6 +1384,18 @@ if __name__ == "__main__":
         parser.error("Focus data will not be written if -out_focus and -out_focus_local are "
                      "specified but -focus_data is not. Outputting focus results requires an input of focus data.")
     run_approved = True
+    parameter_errors = ''
+    if args.neighbors <= 0:
+        parameter_errors += "Number of neighbors must be a positive integer.\n"
+        run_approved = False
+    if args.alpha <= 0:
+        parameter_errors += "Alpha must be a positive number.\n"
+        run_approved = False
+    if args.shuffles < 9:
+        parameter_errors += "Number of shuffles must be at least 9.\n"
+        run_approved = False
+    if parameter_errors:
+        sys.stderr.write(parameter_errors)
     if not args.no_inspect:
         weights = args.use_case_weights
         errors = check_data_dirty(args.details, args.histories, args.focus_data, args.use_exposure, weights)
