@@ -16,7 +16,7 @@
 
 import unittest
 
-from imports_for_testing import *
+from .imports_for_testing import *
 
 
 class TestCalculateObservedQi(unittest.TestCase):
