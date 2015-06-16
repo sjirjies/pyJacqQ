@@ -67,7 +67,7 @@ def check_data_dirty(details_csv_path, histories_csv_path, focus_csv_path=None, 
             schema, header, data = info
             schema_length = len(schema)
             for index, row in enumerate(data):
-                if len(row) != schema_length:
+                if len(row) < schema_length:
                     errors.append("File '%s': Row %d has an incorrect number of attributes" %
                                   (file_name, index+2))
         return errors
@@ -1388,8 +1388,8 @@ if __name__ == "__main__":
     if args.neighbors <= 0:
         parameter_errors += "Number of neighbors must be a positive integer.\n"
         run_approved = False
-    if args.alpha <= 0:
-        parameter_errors += "Alpha must be a positive number.\n"
+    if args.alpha <= 0 or args.alpha >= 1:
+        parameter_errors += "Alpha must be a number between 0 and 1.\n"
         run_approved = False
     if args.shuffles < 9:
         parameter_errors += "Number of shuffles must be at least 9.\n"
