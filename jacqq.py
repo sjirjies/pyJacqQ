@@ -16,17 +16,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 import sys
 import os
 import scipy.spatial as spatial
 import scipy.stats
 import collections
 import datetime
+import platform
 
 import numpy as np
 import argparse
-from random import random, choice
+import random
 import csv
 
 
@@ -93,25 +94,26 @@ def check_data_dirty(details_csv_path, histories_csv_path, focus_csv_path=None, 
             reverse_header = {val: key for key, val in header.items()}
             for row_index, row in enumerate(data):
                 for field_index, field in enumerate(row):
-                    correct_type = schema[reverse_header[field_index]]
-                    if correct_type is 'date':
-                        if len(str(field)) != 8 or not str(field).isdigit():
-                            errors.append("File '%s': Row %d requires date format YYYYMMDD for attribute '%s'" %
-                                          (file_name, row_index+2, reverse_header[field_index]))
-                    elif correct_type is float:
-                        try:
-                            numeric_field = float(field)
-                            if reverse_header[field_index] in ('exposure_duration', 'latency'):
-                                if numeric_field < 0:
-                                    errors.append("File '%s': Row %d required a non-negative value for attribute '%s'" %
-                                                  (file_name, row_index+2, reverse_header[field_index]))
-                        except ValueError:
-                            errors.append("File '%s': Row %d requires a number for attribute '%s'" %
-                                          (file_name, row_index+2, reverse_header[field_index]))
-                    elif correct_type is bool:
-                        if field != "0" and field != "1":
-                            errors.append("File '%s': Row %d requires a 0 or 1 for attribute '%s'" %
-                                          (file_name, row_index+2, reverse_header[field_index]))
+                    if reverse_header[field_index] in schema:
+                        correct_type = schema[reverse_header[field_index]]
+                        if correct_type is 'date':
+                            if len(str(field)) != 8 or not str(field).isdigit():
+                                errors.append("File '%s': Row %d requires date format YYYYMMDD for attribute '%s'" %
+                                              (file_name, row_index+2, reverse_header[field_index]))
+                        elif correct_type is float:
+                            try:
+                                numeric_field = float(field)
+                                if reverse_header[field_index] in ('exposure_duration', 'latency'):
+                                    if numeric_field < 0:
+                                        errors.append("File '%s': Row %d required a non-negative value for attribute '%s'" %
+                                                      (file_name, row_index+2, reverse_header[field_index]))
+                            except ValueError:
+                                errors.append("File '%s': Row %d requires a number for attribute '%s'" %
+                                              (file_name, row_index+2, reverse_header[field_index]))
+                        elif correct_type is bool:
+                            if field != "0" and field != "1":
+                                errors.append("File '%s': Row %d requires a 0 or 1 for attribute '%s'" %
+                                              (file_name, row_index+2, reverse_header[field_index]))
         return errors
 
     def all_cases_or_controls(details_path, all_info):
@@ -515,6 +517,8 @@ class QStudyResults:
         self.number_sig_focus_points = 0
         self.dates_lower_k_plus_one = {}
         self.binom = None
+        self.seed = None
+        self.platform = platform.system() + " " + platform.release()
 
     def print_results(self):
         """ Print the results to console.
@@ -564,6 +568,8 @@ class QStudyResults:
         g['submitted_alpha'] = self.submitted_alpha
         g['mt_correction'] = self.alpha_adjustment_method
         g['adjusted_alpha'] = self.adjusted_alpha
+        g['seed'] = self.seed
+        g['platform'] = self.platform
         g['Q_case_years'] = self.Q_case_years[0]
         g['Q_normalized_case_years'] = self.normalized_Q_case_years
         g['Q_pval'] = self.Q_case_years[1]
@@ -878,7 +884,7 @@ class QStatsStudy:
         self._study_histories_path = study_histories_path
         self._focus_data_path = focus_data_path
 
-    def run_analysis(self, k, use_exposure, use_weights, alpha=0.05, shuffles=99, correction='BINOM'):
+    def run_analysis(self, k, use_exposure, use_weights, alpha=0.05, shuffles=99, correction='BINOM', seed=None):
         """Perform Jacquez's Q.
 
         This method performs Jacquez's Q on the study dataset with the
@@ -910,6 +916,10 @@ class QStatsStudy:
         None is given than no correction will be used.
         :return: A QStudyResults object.
         """
+        # Set the seed
+        if not seed:
+            seed = random.randint(0, 2**32)
+        random.seed(seed)
         # Load the study entities
         details_legend, details_values = _load_csv_file(self._study_details_path)
         study_entities = QStatsStudy._extract_study_entities(details_legend, details_values, use_exposure, use_weights)
@@ -929,7 +939,6 @@ class QStatsStudy:
                                                         f_legend=focus_legend, focus_histories=focus_values,
                                                         exposure=use_exposure)
         # TODO: Check for someone at two places at once and such
-        # TODO: Parse for user data errors and write them to standard error
         QStatsStudy._sort_time_slices(time_slices)
         QStatsStudy._find_time_slice_deltas(time_slices)
         QStatsStudy._remove_empty_time_slices(time_slices)
@@ -998,6 +1007,7 @@ class QStatsStudy:
         results = QStudyResults()
         results.k = k
         results.number_permutation_shuffles = shuffles
+        results.seed = seed
         results.adjusted_alpha = correct_alpha
         results.submitted_alpha = alpha
         results.alpha_adjustment_method = str(correction).upper()
@@ -1238,7 +1248,7 @@ class QStatsStudy:
         remaining_case_flags = len([entity for entity in study_entities.values() if entity.is_case])
         remaining_entities = list(study_entities.values())
         while remaining_case_flags > 0:
-            random_entity = choice(remaining_entities)
+            random_entity = random.choice(remaining_entities)
             # Possible Speedup: remaining_entities = [e for e in remaining_entities if e is not random_entity]
             remaining_entities.remove(random_entity)
             random_entity.set_temp_case_status_of_points(True)
@@ -1273,7 +1283,7 @@ class QStatsStudy:
             last_entity = remaining_entities[-1]
             entity_intervals[last_entity] = (entity_intervals[last_entity][0], 1)
             # Pick a random number between 0 and 1
-            selection = random()
+            selection = random.random()
             # Find which individual contains that number in its weight interval. That individual is a case
             for entity in remaining_entities:
                 if entity_intervals[entity][0] <= selection <= entity_intervals[entity][1]:
@@ -1376,6 +1386,8 @@ if __name__ == "__main__":
                              "If any other string such as 'NONE' is given than no correction will be used.")
     parser.add_argument('--no_inspect', '-N', action='store_true', default=False, dest='no_inspect',
                         help="Pass this flag to prevent the program from pre-parsing the data for errors.")
+    parser.add_argument('--seed', type=int, default=None, dest='seed',
+                        help="The seed to use with the random number generator.")
     args = parser.parse_args()
     if args.focus_data:
         if args.out_focus is None or args.out_focus_local is None:
@@ -1408,8 +1420,8 @@ if __name__ == "__main__":
 
     if run_approved:
         q_analysis = QStatsStudy(args.details, args.histories, args.focus_data)
-        self = q_analysis.run_analysis(args.neighbors, args.use_exposure, args.use_case_weights, args.alpha,
-                                       args.shuffles, args.correction)
+        results = q_analysis.run_analysis(args.neighbors, args.use_exposure, args.use_case_weights, args.alpha,
+                                          args.shuffles, args.correction, seed=args.seed)
         # results.print_results()
-        self.write_to_files(args.out_global, args.out_cases, args.out_dates, args.out_local,
-                            args.out_focus, args.out_focus_local)
+        results.write_to_files(args.out_global, args.out_cases, args.out_dates, args.out_local,
+                               args.out_focus, args.out_focus_local)
