@@ -914,11 +914,13 @@ class QStatsStudy:
         for any significance. 'BINOM' applies the binomial method used
         in doi: 10.1016/j.sste.2012.09.002. If any other string such as
         None is given than no correction will be used.
+        :param seed: A number used to seed the random number generator.
+        If none is provided, a random number between 0 and (2^32)-1 is used.
         :return: A QStudyResults object.
         """
         # Set the seed
         if not seed:
-            seed = random.randint(0, 2**32)
+            seed = random.randint(0, 2**32-1)
         random.seed(seed)
         # Load the study entities
         details_legend, details_values = _load_csv_file(self._study_details_path)
