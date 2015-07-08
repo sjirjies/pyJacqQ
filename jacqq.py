@@ -508,6 +508,7 @@ class QStudyResults:
         self.normalized_Qf_case_years = 0
         self.Qf_case_years = ()
         self.cases = collections.OrderedDict()
+        self.controls = collections.OrderedDict()
         self.sig_cases = collections.OrderedDict()
         self.focus_entities = collections.OrderedDict()
         self.sig_focus_entities = collections.OrderedDict()
@@ -582,21 +583,25 @@ class QStudyResults:
         return g
 
     @staticmethod
-    def _get_tabular_entity_data(entity_dict, stat_label):
+    def _get_tabular_entity_data(entity_dict, stat_label, is_case):
         # Returns tabular data for entities
         entity_rows = []
         for name in entity_dict:
-            row = [name]
+            row = [name, 1 if is_case else 0]
             row.extend(entity_dict[name].stat)
             entity_rows.append(row)
-        header = ['id', stat_label, 'pval', 'sig']
+        header = ['id', 'is_case', stat_label, 'pval', 'sig']
         return header, entity_rows
 
-    def get_tabular_case_data(self):
+    def get_tabular_individual_data(self):
         # TODO: Include normalized Qi
         # 'normalized' Qi is obtained by dividing Qi by exposure duration
         # units for normalized Qi are cases
-        return self._get_tabular_entity_data(self.cases, 'Qi_case_years')
+        header, rows = self._get_tabular_entity_data(self.cases, 'Qi_case_years', True)
+        if self.controls:
+            _, control_rows = self._get_tabular_entity_data(self.controls, 'Qi_case_years', False)
+            rows.extend(control_rows)
+        return header, rows
 
     def get_tabular_date_data(self):
         """Returns tabular, normalized time slice results.
@@ -641,7 +646,13 @@ class QStudyResults:
         labels and the second item is a list of rows populated with
         focus data including id, Qif, p-value, and significance.
         """
-        return self._get_tabular_entity_data(self.focus_entities, 'Qif_case_years')
+        entity_rows = []
+        for name in self.focus_entities:
+            row = [name]
+            row.extend(self.focus_entities[name].stat)
+            entity_rows.append(row)
+        header = ['id', 'Qif_case_years', 'pval', 'sig']
+        return header, entity_rows
 
     def get_tabular_local_focus_data(self):
         """Returns tabular, normalized local focus results.
@@ -701,7 +712,7 @@ class QStudyResults:
         global_output_file.write(global_string)
         global_output_file.close()
 
-        case_header, case_rows = self.get_tabular_case_data()
+        case_header, case_rows = self.get_tabular_individual_data()
         date_header, date_rows = self.get_tabular_date_data()
         local_header, local_rows = self.get_tabular_local_data()
         focus_header, focus_rows = self.get_tabular_focus_data()
@@ -884,7 +895,8 @@ class QStatsStudy:
         self._study_histories_path = study_histories_path
         self._focus_data_path = focus_data_path
 
-    def run_analysis(self, k, use_exposure, use_weights, alpha=0.05, shuffles=99, correction='BINOM', seed=None):
+    def run_analysis(self, k, use_exposure, use_weights, alpha=0.05, shuffles=99, correction='BINOM', seed=None,
+                     suppress_controls=False):
         """Perform Jacquez's Q.
 
         This method performs Jacquez's Q on the study dataset with the
@@ -1021,6 +1033,7 @@ class QStatsStudy:
             results.Qf_case_years = (
                 global_Qf.statistic / 365.0, global_Qf.p_value, int(global_Qf.p_value <= correct_alpha))
             results.normalized_Qf = results.Qf_case_years[0] / len(focus_entities)
+        # Set the individual-level statistics, Qi
         for entity_name in sorted(study_entities.keys()):
             entity = study_entities[entity_name]
             if entity.is_case:
@@ -1030,6 +1043,10 @@ class QStatsStudy:
                 results.cases[entity.identity] = individual_result
                 if is_sig:
                     results.sig_cases[entity.identity] = individual_result
+            # Deal with control output unless it is off
+            elif not suppress_controls:
+                results.controls[entity.identity] = QStudyEntityResult((None, None, None))
+        # Set Qfi for focus points through time
         if self._focus_data_path:
             for focus_name in sorted(focus_entities.keys()):
                 focus = focus_entities[focus_name]
@@ -1039,6 +1056,7 @@ class QStatsStudy:
                 results.focus_entities[focus.identity] = focus_result
                 if is_sig:
                     results.sig_focus_entities[focus.identity] = focus_result
+        # Set the time slice statistic Qt
         for time_slice in time_slices:
             time_is_sig = int(time_slice.Qt.p_value <= correct_alpha)
             ts_stat = (time_slice.Qt.statistic, time_slice.Qt.p_value, time_is_sig)
@@ -1050,13 +1068,13 @@ class QStatsStudy:
             if len(time_slice.points) <= results.k + 1:
                 results.dates_lower_k_plus_one[time_slice.date] = time_result
             for study_point in time_slice.points:
+                entity_id = study_point.owner.identity
                 if study_point.owner.is_case:
                     point_is_sig = int(study_point.point_stat.p_value <= correct_alpha)
                     qit_stat = (
                         int(study_point.point_stat.statistic / time_slice.delta), study_point.point_stat.p_value,
                         point_is_sig)
                     qit = QStudyPointResult(qit_stat, (study_point.x, study_point.y))
-                    entity_id = study_point.owner.identity
                     time_result.points[entity_id] = qit
                     results.cases[entity_id].points[time_slice.date] = qit
                     if point_is_sig:
@@ -1065,6 +1083,10 @@ class QStatsStudy:
                         results.sig_time_slices[time_slice.date].sig_points[entity_id] = qit
                     if point_is_sig and entity_id in results.sig_cases:
                         results.sig_cases[entity_id].sig_points[time_slice.date] = qit
+                # Deal with control output unless it is off
+                elif not suppress_controls:
+                    results.controls[entity_id].points[time_slice.date] = None
+                    time_result.points[entity_id] = QStudyPointResult((None, None, None), (study_point.x, study_point.y))
             if self._focus_data_path:
                 for focus_point in time_slice.focus_points:
                     focus_point_is_sig = int(focus_point.point_stat.p_value <= correct_alpha)
@@ -1390,6 +1412,8 @@ if __name__ == "__main__":
                         help="Pass this flag to prevent the program from pre-parsing the data for errors.")
     parser.add_argument('--seed', type=int, default=None, dest='seed',
                         help="The seed to use with the random number generator.")
+    parser.add_argument('--only-cases', '-O', action='store_true', default=False, dest='output_controls',
+                        help="Pass this flag to limit prevent output of control results.")
     args = parser.parse_args()
     if args.focus_data:
         if args.out_focus is None or args.out_focus_local is None:
@@ -1423,7 +1447,8 @@ if __name__ == "__main__":
     if run_approved:
         q_analysis = QStatsStudy(args.details, args.histories, args.focus_data)
         results = q_analysis.run_analysis(args.neighbors, args.use_exposure, args.use_case_weights, args.alpha,
-                                          args.shuffles, args.correction, seed=args.seed)
+                                          args.shuffles, args.correction, seed=args.seed,
+                                          suppress_controls=args.output_controls)
         # results.print_results()
         results.write_to_files(args.out_global, args.out_cases, args.out_dates, args.out_local,
                                args.out_focus, args.out_focus_local)
