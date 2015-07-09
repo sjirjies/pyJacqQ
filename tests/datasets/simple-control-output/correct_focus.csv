@@ -1,0 +1,4 @@
+id,Qif_case_years,pval,sig
+focus_case,0.0136986301,0.01,1
+focus_control,0,1,0
+focus_mixed,0.00821918,0.52,0

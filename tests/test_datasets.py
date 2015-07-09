@@ -28,19 +28,21 @@ from jacqq import _load_csv_file as load_csv_file
 class DataTestHelper:
     round_digits = 8
 
-    def __init__(self, folder_name, k=5, exposure=False, weights=False, alpha=0.05, shuffles=99, correction=None):
+    def __init__(self, folder_name, k=5, exposure=False, weights=False, alpha=0.05, shuffles=99, correction=None,
+                 suppress_controls=True):
         self.k = k
         self.exposure = exposure
         self.weights = weights
         self.alpha = alpha
         self.shuffles = shuffles
         self.correction = correction
+        self.suppress_controls = suppress_controls
         folder = os.getcwd() + os.sep + 'datasets' + os.sep + folder_name + os.sep
         self.folder = folder
         self.folder_name = folder_name
         study = QStatsStudy(folder + 'details.csv', folder + 'histories.csv', folder + 'focus.csv')
         self.results = study.run_analysis(self.k, self.exposure, self.weights, self.alpha,
-                                          self.shuffles, self.correction)
+                                          self.shuffles, self.correction, suppress_controls=suppress_controls)
         self.correct_global = self.load_csv_int_dict(folder + 'correct_global.csv')
         self.test_alpha_assignment()
         self.test_exposure_assignment()
@@ -62,11 +64,14 @@ class DataTestHelper:
         for row in rows:
             collected_attributes = []
             for attr in attributes:
-                try:
-                    val = float(row[legend[attr]])
-                    val = round(val, DataTestHelper.round_digits)
-                except ValueError:
-                    val = str(row[legend[attr]])
+                if row[legend[attr]] is None:
+                    val = ""
+                else:
+                    try:
+                        val = float(row[legend[attr]])
+                        val = round(val, DataTestHelper.round_digits)
+                    except ValueError:
+                        val = str(row[legend[attr]])
                 collected_attributes.append(str(val))
             modified_rows.append(tuple(collected_attributes))
         return modified_rows
@@ -163,7 +168,7 @@ class DataTestHelper:
 
     def test_cases_result(self):
         attributes = ('id', 'Qi_case_years')
-        self.test_data_set(attributes, 'correct_cases.csv', self.results.get_tabular_case_data())
+        self.test_data_set(attributes, 'correct_cases.csv', self.results.get_tabular_individual_data())
 
     def test_date_results(self):
         attributes = ('start_date', 'end_date', 'Qt_cases')
@@ -185,3 +190,9 @@ class TestDataSets(unittest.TestCase):
 
     def weights_strong_data(self):
         DataTestHelper('weights_strong', k=5, weights=True)
+
+    def test_exposure_with_control_output(self):
+        DataTestHelper('exposure-control-output', k=5, exposure=True, suppress_controls=False)
+
+    def test_simple_with_control_output(self):
+        DataTestHelper('simple-control-output', k=5, suppress_controls=False)

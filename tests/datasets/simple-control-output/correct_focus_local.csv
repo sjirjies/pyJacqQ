@@ -1,0 +1,4 @@
+start_date,end_date,id,x,y,Qift_days,pval,sig
+20150101,20150102,focus_case,0.6,1.1,5,0.01,1
+20150101,20150102,focus_mixed,9.6,1.1,3,0.52,0
+20150101,20150102,focus_control,17.6,1.1,0,1,0

@@ -1,0 +1,4 @@
+ID,start_date,end_date,x,y
+focus_case,20150101,20150102,0.6,1.1
+focus_mixed,20150101,20150102,9.6,1.1
+focus_control,20150101,20150102,17.6,1.1

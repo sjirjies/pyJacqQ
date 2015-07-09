@@ -1,5 +1,5 @@
-id,Qi_case_years,pval,sig
-case_1,0.0,1.0,0
-case_2,0.0,1.0,0
-case_3,0.0,1.0,0
-case_4,0.0,1.0,0
+id,is_case,Qi_case_years,pval,sig
+case_1,1,0.0,1.0,0
+case_2,1,0.0,1.0,0
+case_3,1,0.0,1.0,0
+case_4,1,0.0,1.0,0
