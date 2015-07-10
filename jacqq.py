@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '0.2.3'
+__version__ = '0.3.0'
 import sys
 import os
 import scipy.spatial as spatial
@@ -548,10 +548,10 @@ class QStudyResults:
             tslice = self.time_slices[slice_date]
             stat = tslice.stat
             print(' Date: %-9s Delta: %-3d Qt: %-3d pval: %.4f Sig: %s' %
-                  (slice_date, tslice.duration, stat[0], stat[1], 'T' if stat[2] else 'F'))
+                  (slice_date, tslice.duration_days, stat[0], stat[1], 'T' if stat[2] else 'F'))
             for point_name in tslice.points:
                 point_stat = tslice.points[point_name].stat
-                print('  Owner: %-21s Qit: %-3d pval: %.4f Sig: %s' %
+                print('  Owner: %-21s Qit: %-3s pval: %.4s Sig: %s' %
                       (point_name, point_stat[0], point_stat[1], 'T' if point_stat[2] else 'F'))
             if tslice.focus_points:
                 for focus_name in tslice.focus_points:
@@ -928,6 +928,8 @@ class QStatsStudy:
         None is given than no correction will be used.
         :param seed: A number used to seed the random number generator.
         If none is provided, a random number between 0 and (2^32)-1 is used.
+        :param suppress_controls: If set to true, only results for cases
+        will be output instead of results for both cases and controls.
         :return: A QStudyResults object.
         """
         # Set the seed
@@ -1069,12 +1071,13 @@ class QStatsStudy:
                 results.dates_lower_k_plus_one[time_slice.date] = time_result
             for study_point in time_slice.points:
                 entity_id = study_point.owner.identity
+                location = study_point.x, study_point.y
                 if study_point.owner.is_case:
                     point_is_sig = int(study_point.point_stat.p_value <= correct_alpha)
                     qit_stat = (
                         int(study_point.point_stat.statistic / time_slice.delta), study_point.point_stat.p_value,
                         point_is_sig)
-                    qit = QStudyPointResult(qit_stat, (study_point.x, study_point.y))
+                    qit = QStudyPointResult(qit_stat, location)
                     time_result.points[entity_id] = qit
                     results.cases[entity_id].points[time_slice.date] = qit
                     if point_is_sig:
@@ -1085,8 +1088,9 @@ class QStatsStudy:
                         results.sig_cases[entity_id].sig_points[time_slice.date] = qit
                 # Deal with control output unless it is off
                 elif not suppress_controls:
-                    results.controls[entity_id].points[time_slice.date] = None
-                    time_result.points[entity_id] = QStudyPointResult((None, None, None), (study_point.x, study_point.y))
+                    qit = (None, None, None)
+                    results.controls[entity_id].points[time_slice.date] = QStudyPointResult(qit, location)
+                    time_result.points[entity_id] = QStudyPointResult(qit, (study_point.x, study_point.y))
             if self._focus_data_path:
                 for focus_point in time_slice.focus_points:
                     focus_point_is_sig = int(focus_point.point_stat.p_value <= correct_alpha)
@@ -1371,7 +1375,7 @@ if __name__ == "__main__":
                         help="Location of individuals' status dataset. Case-control status must be given for all \
                         individuals.")
     parser.add_argument('--out_cases', '-C', required=True,
-                        help="Location to output the results of the lifeline results for cases.")
+                        help="Location to output the results of the lifeline results for individuals.")
     parser.add_argument('--out_dates', '-D', required=True,
                         help="Location to output the results for time slices.")
     parser.add_argument('--out_local', '-L', required=True,
