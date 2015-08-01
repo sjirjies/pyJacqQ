@@ -737,6 +737,15 @@ class QStudyResults:
                 for row in values:
                     writer.writerow(row)
 
+    def write_to_files_prefixed(self, pathway, prefix):
+        if not os.path.isdir(pathway):
+            os.makedirs(pathway)
+        suffixes = ['global', 'individuals', 'dates', 'local', 'focus', 'focuslocal']
+        paths = []
+        for x in suffixes:
+            paths.append(os.path.join(pathway, prefix + '_' + x + '.csv'))
+        self.write_to_files(*paths)
+
 
 class QStudyBinomialResults:
     """Container for the results of a binomal test for the number of
@@ -1374,18 +1383,10 @@ if __name__ == "__main__":
     parser.add_argument('--details', '-d', required=True,
                         help="Location of individuals' status dataset. Case-control status must be given for all \
                         individuals.")
-    parser.add_argument('--out_cases', '-C', required=True,
-                        help="Location to output the results of the lifeline results for individuals.")
-    parser.add_argument('--out_dates', '-D', required=True,
-                        help="Location to output the results for time slices.")
-    parser.add_argument('--out_local', '-L', required=True,
-                        help="Location to output the results for local statistics.")
-    parser.add_argument('--out_global', '-G', required=True,
-                        help="Location to output global results and parameters.")
-    parser.add_argument('--out_focus', '-F', default=None,
-                        help='Location to output focus entity results. Required if focus data is supplied.')
-    parser.add_argument('--out_focus_local', '-J', default=None,
-                        help='Location to output focus point local results. Required if focus data is supplied.')
+    parser.add_argument('--output_location', '-o', required=True,
+                        help="Pathway to the folder to output the results.")
+    parser.add_argument('--output_prefix', '-p', required=True,
+                        help="The prefix to include in the file names of the output.")
     parser.add_argument('--exposure', '-e', action='store_true', default=False, dest='use_exposure',
                         help="If this flag is added then the dataset containing case-control flags must also \
                         contain columns 'DOD' and 'latency' for the date of diagnosis and the number of days of \
@@ -1417,14 +1418,8 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=None, dest='seed',
                         help="The seed to use with the random number generator.")
     parser.add_argument('--only-cases', '-O', action='store_true', default=False, dest='output_controls',
-                        help="Pass this flag to limit prevent output of control results.")
+                        help="Pass this flag to prevent output of control results.")
     args = parser.parse_args()
-    if args.focus_data:
-        if args.out_focus is None or args.out_focus_local is None:
-            parser.error("-focus_data requires -out_focus AND -out_focus_local.")
-    if (args.out_focus or args.out_focus_local) and not args.focus_data:
-        parser.error("Focus data will not be written if -out_focus and -out_focus_local are "
-                     "specified but -focus_data is not. Outputting focus results requires an input of focus data.")
     run_approved = True
     parameter_errors = ''
     if args.neighbors <= 0:
@@ -1454,5 +1449,4 @@ if __name__ == "__main__":
                                           args.shuffles, args.correction, seed=args.seed,
                                           suppress_controls=args.output_controls)
         # results.print_results()
-        results.write_to_files(args.out_global, args.out_cases, args.out_dates, args.out_local,
-                               args.out_focus, args.out_focus_local)
+        results.write_to_files_prefixed(args.output_location, args.output_prefix)
