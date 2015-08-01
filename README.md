@@ -110,9 +110,7 @@ Here is an example using the provided simulation data set:
 python3 jacqq.py --resident=tests/simulation_data/input_residence_histories.csv \
     --details=tests/simulation_data/input_details.csv  \
     --focus_data=tests/simulation_data/input_focus.csv \
-    --out_global=global_results.csv --out_dates=date_results.csv \
-    --out_local=local_results.csv --out_cases=case_results.csv \
-    --out_focus=focus_results.csv --out_focus_local=focus_local_results.csv \
+    --output_location=studyFolder --output_prefix=study1 \
     --exposure --weights --shuffles=99 --alpha=0.05 \
     --correction='BINOM' --neighbors=15
 ```
