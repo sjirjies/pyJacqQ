@@ -124,19 +124,19 @@ First import the module:
 ```python
 import jacqq
 details = "tests/simulation_data/input_details.csv"
-histories = "tests/simulation_data/input_residential_histories.csv"
+histories = "tests/simulation_data/input_residence_histories.csv"
 focus = "tests/simulation_data/input_focus.csv"
 ```
 At this point you may elect to use the data preparser to check for errors 
 given the parameters you plan to use:
 ```python
-errors = check_data_dirty(details, histories, focus, exposure=False, weights=False):
+errors = jacqq.check_data_dirty(details, histories, focus, exposure=True, weights=True)
 ```
 This returns a list of errors present in the data that need correction, for 
 example, missing attributes or wrong data types. If errors are present, they should
 be corrected and `check_data_dirty` rerun to ensure no additional errors.
 
-Next intantiate a `QStatsStudy` object with the location of the input files:
+Next instantiate a `QStatsStudy` object with the location of the input files:
 ```python
 study = jacqq.QStatsStudy(details, histories, focus)
 ```
@@ -154,56 +154,67 @@ Get one of the options used during analysis:
     99
 >>> results.adjusted_alpha
     0.05
+>>> results.seed
+    4077096852
 ```
 Get global Q as (statistic case-years, p-value, significance):
 ```python
 >>> results.Q_case_years
-    (279.1835616438356, 0.01, 1)
+    (501.26575342465753, 0.01, 1)
 ```
 Get the Qf statistic normalized by the number of cases:
 ```python
->>> results.normalized_Qf_case_years
-    1.3102739726027397
+>>> results.normalized_Qf
+    1.2561643835616438
 ```    
 Get the Qt statistic for the slice at January 3rd, 2015:
 ```python
 >>> results.time_slices[20150103].stat
-    (46, 0.01, 1)
+    (87, 0.02, 1)
 ```
 Get a list of only significant case points at that date:
 ```python
 >>> results.time_slices[20150103].sig_points
-    OrderedDict([('JG',
+    OrderedDict([('BM',
         <jacqq.QStudyPointResult object at 0x7f276e880d68>), ... ])
 ```
-Get the local Q_it statistic for case 'JQ' on Jan. 3rd 2015:
+Get the local Q_it statistic for case 'BM' on Jan. 3rd 2015:
 ```python
->>> results.time_slices[20150103].points['JQ'].stat
-    (3, 0.02, 1)
->>> results.cases['JQ'].points[20150103].stat
-    (3, 0.02, 1)
+>>> results.time_slices[20150103].points['BM'].stat
+    (2, 0.03, 1)
+>>> results.cases['BM'].points[20150103].stat
+    (2, 0.03, 1)
 ```
-Find the x, y location of case 'JG' on Jan. 2nd, 2015:
+Find the x, y location of case 'BM' on Jan. 2nd, 2015:
 ```python
->>> results.cases['JG'].points[20150102].loc
-    (73.0, 124.0)
+>>> results.cases['BM'].points[20150102].loc
+    (59.0, 67.0)
 ```
 Get the focus results in tabular/tuple form:
 ```python
 >>> results.get_tabular_focus_data():
-    (['id', 'Qif_case_years', 'pval', 'sig'],
-        [['Away From Sources', 0.0, 1.0, 0],
-        ['Large Constant', 2.052054794520548, 0.01, 1],
-        ['Medium Linear', 1.8712328767123287, 0.01, 1],
-        ['Small Constant', 1.3178082191780822, 0.27, 0]])
+    (['id', 'Qif_case_years', 'pval', 'sig'], 
+        [['Away From Sources', 0.0, 1.0, 0], 
+        ['Large Constant', 2.106849315068493, 0.01, 1], 
+        ['Medium Linear', 1.2027397260273973, 0.01, 1], 
+        ['Small Constant', 1.715068493150685, 0.01, 1]])
 ```
 Get the binomal test results for dates as 
 (number significant statistics, p-value, significance):
 ```python
 >>> results.binom.dates
-    (177, 1.1102230246251565e-16, 1)
+    (200, 1.1102230246251565e-16, 1)
 ```
-Write the results to files:
+Get time slices that have less than k + 1 points:
+```python
+>>> results.dates_lower_k_plus_one
+    {}
+```
+Write the results to files using a path and filename prefix:
+```python
+>>> results.write_to_files_prefixed('path/to/my_results_folder', 'my_study_prefix')
+```
+Write the results to files but specify individual file names:
 ```python
 >>> results.write_to_files('global.csv', 'cases.csv', 'dates.csv',
         'local_cases.csv', 'focus_results.csv', 'focus_local.csv')
