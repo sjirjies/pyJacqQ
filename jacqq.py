@@ -451,7 +451,7 @@ class QStudyResults:
     >>> r.Q_case_years
     (279.1835616438356, 0.01, 1)
     >>> # Get the Qf statistic normalized by the number of cases
-    >>> r.normalized_Qf_case_years
+    >>> r.normalized_Q
     1.3102739726027397
     >>> # Get all of the time slice results
     >>> r.time_slices
@@ -504,8 +504,8 @@ class QStudyResults:
         self.adjusted_alpha = None
         self.alpha_adjustment_method = None
         self.Q_case_years = ()
-        self.normalized_Q_case_years = 0
-        self.normalized_Qf_case_years = 0
+        self.normalized_Q = 0
+        self.normalized_Qf = 0
         self.Qf_case_years = ()
         self.cases = collections.OrderedDict()
         self.controls = collections.OrderedDict()
@@ -572,12 +572,12 @@ class QStudyResults:
         g['seed'] = self.seed
         g['platform'] = self.platform
         g['Q_case_years'] = self.Q_case_years[0]
-        g['Q_normalized_case_years'] = self.normalized_Q_case_years
+        g['Q_normalized'] = self.normalized_Q
         g['Q_pval'] = self.Q_case_years[1]
         g['Q_sig'] = self.Q_case_years[2]
         if self.focus_entities:
             g['Qf_case_years'] = self.Qf_case_years[0]
-            g['Qf_normalized_case_years'] = self.normalized_Qf_case_years
+            g['Qf_normalized'] = self.normalized_Qf
             g['Qf_pval'] = self.Qf_case_years[1]
             g['Qf_sig'] = self.Qf_case_years[2]
         return g
@@ -674,7 +674,7 @@ class QStudyResults:
         local_header = ['start_date', 'end_date', 'id', 'x', 'y', 'Qift_days', 'pval', 'sig']
         return local_header, local_focus_rows
 
-    def write_to_files(self, global_file_path, cases_file_path, dates_file_path, local_file_path,
+    def write_to_files(self, row_based_global, global_file_path, cases_file_path, dates_file_path, local_file_path,
                        focus_file_path=None, focus_local_file_path=None):
         """Saves the results to normalized CSV files.
 
@@ -684,6 +684,7 @@ class QStudyResults:
         If a file does not exist it will be created. Include a .csv
         extension with files if you desire it.
 
+        :param row_based_globals: If true the global file will have row-oriented headers.
         :param global_file_path: File path to store global results.
         :param cases_file_path: File path to store case Q_i results.
         :param dates_file_path: File path to store dates Q_t results.
@@ -707,8 +708,18 @@ class QStudyResults:
                 study_globals[label + '_pval'] = binom_result[1]
                 study_globals[label + '_sig'] = binom_result[2]
         global_string = ''
-        for label, value in study_globals.items():
-            global_string += "%s,%s\n" % (str(label), str(value))
+        if row_based_global:
+            for label, value in study_globals.items():
+                global_string += "%s,%s\n" % (str(label), str(value))
+        else:
+            for label in study_globals.keys():
+                global_string += str(label) + ','
+            # Remove the last comma
+            global_string = global_string[:-1]
+            global_string += "\n"
+            for value in study_globals.values():
+                global_string += str(value) + ','
+            global_string = global_string[:-1]
         global_output_file.write(global_string)
         global_output_file.close()
 
@@ -737,14 +748,14 @@ class QStudyResults:
                 for row in values:
                     writer.writerow(row)
 
-    def write_to_files_prefixed(self, pathway, prefix):
+    def write_to_files_prefixed(self, pathway, prefix, row_based_global=False):
         if not os.path.isdir(pathway):
             os.makedirs(pathway)
         suffixes = ['global', 'individuals', 'dates', 'local', 'focus', 'focuslocal']
         paths = []
         for x in suffixes:
             paths.append(os.path.join(pathway, prefix + '_' + x + '.csv'))
-        self.write_to_files(*paths)
+        self.write_to_files(row_based_global, *paths)
 
 
 class QStudyBinomialResults:
@@ -1419,6 +1430,8 @@ if __name__ == "__main__":
                         help="The seed to use with the random number generator.")
     parser.add_argument('--only-cases', '-O', action='store_true', default=False, dest='output_controls',
                         help="Pass this flag to prevent output of control results.")
+    parser.add_argument('--row_global', '-R', action='store_true', default=False, dest='row_global',
+                        help="Pass this flap to output the global results with row-based headers.")
     args = parser.parse_args()
     run_approved = True
     parameter_errors = ''
@@ -1449,4 +1462,5 @@ if __name__ == "__main__":
                                           args.shuffles, args.correction, seed=args.seed,
                                           suppress_controls=args.output_controls)
         # results.print_results()
-        results.write_to_files_prefixed(args.output_location, args.output_prefix)
+        results.write_to_files_prefixed(args.output_location, args.output_prefix,
+                                        row_based_global=args.row_global)
